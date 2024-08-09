@@ -1,0 +1,207 @@
+# Import necessary libraries
+import logging
+import unittest
+import requests
+from bs4 import BeautifulSoup
+import re
+import tkinter as tk
+from tkinter import ttk, Scrollbar, Text, END, StringVar, messagebox
+import bleach
+
+# Set up logging
+logging.basicConfig(filename='web_scraper.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# Use a requests session for better performance and handling cookies
+session = requests.Session()
+
+# Function to check if the URL is valid
+def is_valid_url(url):
+    url_regex = re.compile(
+        r'^(?:http|ftp)s?://'  
+        r'(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+(?:[A-Z]{2,6}\.?|[A-Z0-9-]{2,}\.?)|' 
+        r'localhost|'  
+        r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}|'  
+        r'\[?[A-F0-9]*:[A-F0-9:]+\]?)'  
+        r'(?::\d+)?'  
+        r'(?:/?|[/?]\S+)$', re.IGNORECASE)
+
+    return re.match(url_regex, url)
+
+# Function to update result text in Text widget
+def update_result_text(result_text, data, prefix):
+    result_text.config(state=tk.NORMAL)
+    result_text.delete(1.0, END)
+    result_text.insert(tk.END, f"{prefix} {data}")
+    result_text.config(state=tk.DISABLED)
+
+# Function to clear text in Text widget
+def clear_text(text_widget):
+    text_widget.config(state=tk.NORMAL)
+    text_widget.delete(1.0, END)
+    text_widget.config(state=tk.DISABLED)
+
+# Function to handle request errors
+def handle_request_error(entered_url, e):
+    messagebox.showerror("Error", f"Failed to make the request for {entered_url}. Please check your URL and try again.")
+    logging.error(f"Request error for {entered_url}: {e}")
+
+# Function to handle generic errors
+def handle_generic_error(e):
+    messagebox.showerror("Error", f"An unexpected error occurred. Please check your URL and try again.")
+    logging.error(f"Unexpected error: {e}")
+
+# Function to scrape and display data
+def scrape_and_display():
+    entered_url = entry.get().strip()
+
+    if not entered_url:
+        messagebox.showerror("Empty URL", "Please enter a URL before clicking 'Scrape and Display'.")
+        return
+
+    if not is_valid_url(entered_url):
+        messagebox.showerror("Invalid URL", "Please enter a valid URL.")
+        logging.error(f"Invalid URL entered: {entered_url}")
+        return
+
+    try:
+        response = session.get(entered_url, allow_redirects=False)
+
+        if response.status_code == 200:
+            soup = BeautifulSoup(response.text, 'html.parser')
+            extract_and_display_data(soup)
+        elif response.status_code == 302:
+            new_location = response.headers.get('Location')
+            messagebox.showinfo("Redirect", f"The URL has been redirected to: {new_location}")
+        else:
+            update_result_text(link_result, f"Failed to retrieve the page. Status code: {response.status_code}", "Error")
+            update_result_text(paragraph_result, "", "Paragraph")
+            update_result_text(image_result, "", "Image")
+            logging.error(f"Failed to retrieve the page. Status code: {response.status_code}")
+
+    except requests.exceptions.RequestException as e:
+        handle_request_error(entered_url, e)
+    except Exception as e:
+        handle_generic_error(e)
+
+# Function to extract and display data from BeautifulSoup object
+def extract_and_display_data(soup):
+    links = soup.find_all('a')
+    proper_links = [link.get('href') for link in links if is_valid_url(link.get('href'))]
+    link_text = "\n".join([f"Link {i + 1}: {link}" for i, link in enumerate(proper_links)])
+    update_result_text(link_result, link_text, "Link")
+
+    paragraphs = soup.find_all('p')
+    paragraph_text = "\n".join([f"Paragraph {i + 1}: {bleach.clean(paragraph.text)}" for i, paragraph in enumerate(paragraphs)])
+    update_result_text(paragraph_result, paragraph_text, "Paragraph")
+
+    images = soup.find_all('img')
+    image_text = "\n".join([f"Image {i + 1}: {bleach.clean(img.get('src'))}" for i, img in enumerate(images)])
+    update_result_text(image_result, image_text, "Image")
+
+# Create the main Tkinter window
+root = tk.Tk()
+root.title("Web Scraping GUI")
+root.geometry("900x600")
+root.pack_propagate(0)
+
+default_url = "https://www.google.com"
+url_var = StringVar()
+url_var.set(default_url)
+
+entry_label = ttk.Label(root, text="Enter URL:")
+entry_label.grid(row=0, column=0, pady=5)
+
+entry = ttk.Entry(root, width=50, textvariable=url_var)
+entry.grid(row=0, column=1, pady=10)
+
+scrape_button = ttk.Button(root, text="Scrape and Display", command=scrape_and_display)
+scrape_button.grid(row=0, column=2, pady=10)
+
+link_label = ttk.Label(root, text="Links will be displayed here:")
+link_label.grid(row=1, column=0, pady=5)
+
+paragraph_label = ttk.Label(root, text="Paragraphs will be displayed here:")
+paragraph_label.grid(row=2, column=0, pady=5)
+
+image_label = ttk.Label(root, text="Images data will be displayed here:")
+image_label.grid(row=3, column=0, pady=5)
+
+link_result = Text(root, wrap=tk.NONE, height=10, width=70, xscrollcommand=True)
+link_result.insert(tk.END, "Links will be displayed here.")
+link_result.config(state=tk.DISABLED)
+link_result.grid(row=1, column=1, pady=10, sticky="ew")
+
+paragraph_result = Text(root, wrap=tk.NONE, height=10, width=70, xscrollcommand=True)
+paragraph_result.insert(tk.END, "Paragraphs will be displayed here.")
+paragraph_result.config(state=tk.DISABLED)
+paragraph_result.grid(row=2, column=1, pady=10, sticky="ew")
+
+image_result = Text(root, wrap=tk.NONE, height=10, width=70, xscrollcommand=True)
+image_result.insert(tk.END, "Images will be displayed here.")
+image_result.config(state=tk.DISABLED)
+image_result.grid(row=3, column=1, pady=10, sticky="ew")
+
+clear_link_button = ttk.Button(root, text="Clear Links", command=lambda: clear_text(link_result))
+clear_link_button.grid(row=1, column=2, pady=5)
+
+clear_paragraph_button = ttk.Button(root, text="Clear Paragraphs", command=lambda: clear_text(paragraph_result))
+clear_paragraph_button.grid(row=2, column=2, pady=5)
+
+clear_image_button = ttk.Button(root, text="Clear Images", command=lambda: clear_text(image_result))
+clear_image_button.grid(row=3, column=2, pady=5)
+
+scrollbar_link = Scrollbar(root, command=link_result.yview)
+scrollbar_link.grid(row=1, column=3, sticky='ns', pady=10)
+link_result.config(yscrollcommand=scrollbar_link.set)
+
+scrollbar_paragraph = Scrollbar(root, command=paragraph_result.yview)
+scrollbar_paragraph.grid(row=2, column=3, sticky='ns', pady=10)
+paragraph_result.config(yscrollcommand=scrollbar_paragraph.set)
+
+scrollbar_image = Scrollbar(root, command=image_result.yview)
+scrollbar_image.grid(row=3, column=3, sticky='ns', pady=10)
+image_result.config(yscrollcommand=scrollbar_image.set)
+
+# Function to be called when the Tkinter window is closed
+def on_close():
+    session.close()
+    root.destroy()  # Close the Tkinter window
+
+# Bind the on_close function to the window close event
+root.protocol("WM_DELETE_WINDOW", on_close)
+
+# Test class for Web Scraper
+class TestWebScraper(unittest.TestCase):
+
+    def test_valid_urls(self):
+        valid_urls = [
+            "http://example.com",
+            "https://www.example.com",
+            "ftp://ftp.example.com",
+            "http://localhost",
+            "http://127.0.0.1",
+            "http://[2001:db8::1]",
+            # Add more valid URLs as needed
+        ]
+
+        for url in valid_urls:
+            with self.subTest(url=url):
+                self.assertTrue(is_valid_url(url), f"{url} should be a valid URL")
+
+    def test_invalid_urls(self):
+        invalid_urls = [
+            "example.com",  # missing scheme
+            "htp://example.com",  # misspelled scheme
+            "http://.com",  # missing domain
+            "http://example",  # missing top-level domain
+            # Add more invalid URLs as needed
+        ]
+
+        for url in invalid_urls:
+            with self.subTest(url=url):
+                self.assertFalse(is_valid_url(url), f"{url} should be an invalid URL")
+
+if __name__ == '__main__':
+    unittest.main()
+
+root.mainloop()
