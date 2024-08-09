@@ -30,4 +30,12 @@ Close the window to terminate the program.
 
 
 
+![output_sample_1](https://github.com/user-attachments/assets/4209c976-2c83-4c17-99c5-01fc24ec0d58)
+
+
+![output_with_error](https://github.com/user-attachments/assets/c152c394-27a7-49b7-8eb9-1f7b667971ab)
+
+
+
+![log_file_output](https://github.com/user-attachments/assets/e583f477-28f6-4fc1-9b6c-8caec5598658)
 
